@@ -1,0 +1,6 @@
+{
+  "name": "مغامرات لؤلؤ الشجاع",
+  "description": "لعبة تعليمية تفاعلية للأطفال لتعلم التعبير عن المشاعر والإقناع اللطيف والبدائل الذكية مع الأسد الصغير لؤلؤ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
