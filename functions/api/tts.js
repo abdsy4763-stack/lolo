@@ -9,8 +9,14 @@ export async function onRequestGet(context) {
         headers: { "Content-Type": "application/json" },
       });
     }
+    if (text.length > 1000) {
+      return new Response(JSON.stringify({ error: "Text must be 1000 characters or fewer" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-    const elevenKey = context.env.VITE_TTS_API_KEY || context.env.ELEVENLABS_API_KEY;
+    const elevenKey = context.env.ELEVENLABS_API_KEY || context.env.VITE_TTS_API_KEY;
     const voiceId = url.searchParams.get("voice") || context.env.VITE_TTS_VOICE_ID || "I3u6waC588j43py1kDN2";
 
     // 1. محاولة ElevenLabs
