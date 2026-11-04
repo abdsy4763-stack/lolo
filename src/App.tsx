@@ -222,6 +222,8 @@ export default function App() {
     setCompletedEpisodeIds(Storage.getCompletedEpisodeIds());
 
     const interval = setInterval(() => {
+      // لا نحتسب وقتاً إضافياً ولا نعيد شاشة النوم أثناء تعامل الوالد مع الإعدادات.
+      if (isSleepMode || isParentOpen) return;
       const secs = Storage.incrementPlaySeconds(5);
       const limitSecs = settings.dailyLimitMinutes * 60;
       if (settings.dailyLimitMinutes < 999 && secs >= limitSecs) {
@@ -229,7 +231,7 @@ export default function App() {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [settings.dailyLimitMinutes]);
+  }, [settings.dailyLimitMinutes, isSleepMode, isParentOpen]);
 
   // نطق ترحيبي عند فتح التطبيق
   useEffect(() => {
