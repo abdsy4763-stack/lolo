@@ -9,7 +9,7 @@ import { ParentVoiceClipKey } from '../types';
 import { Storage } from './storage';
 import { recordedVoices } from './recordedVoices';
 
-export const TTS_CACHE_NAME = 'kids-tts-audio-v1';
+export const TTS_CACHE_NAME = 'kids-tts-audio-v2';
 export const DEFAULT_ELEVEN_VOICE_ID = 'I3u6waC588j43py1kDN2'; // Custom child-friendly Arabic voice
 
 /**
@@ -40,17 +40,30 @@ export async function getCachedAudioBlob(cacheKey: string): Promise<Blob | null>
 /**
  * حفظ ملف صوتي في Cache Storage API للمتصفح لإعادة استخدامه بدون استهلاك الإنترنت أو الرصيد
  */
-export async function saveCachedAudioBlob(cacheKey: string, blob: Blob): Promise<void> {
+export async function saveCachedAudioBlob(cacheKey: string, blob: Blob, provider = 'unknown'): Promise<void> {
   if (typeof window === 'undefined' || !('caches' in window)) return;
   try {
     const cache = await caches.open(TTS_CACHE_NAME);
     const headers = new Headers();
     headers.set('Content-Type', blob.type || 'audio/mpeg');
     headers.set('Content-Length', blob.size.toString());
+    headers.set('X-TTS-Provider', provider);
     const response = new Response(blob, { headers });
     await cache.put(cacheKey, response);
   } catch {
     // ignore cache write errors
+  }
+}
+
+/** Read the provider stored with a cached audio response. */
+export async function getCachedAudioProvider(cacheKey: string): Promise<string | null> {
+  if (typeof window === 'undefined' || !('caches' in window)) return null;
+  try {
+    const cache = await caches.open(TTS_CACHE_NAME);
+    const response = await cache.match(cacheKey);
+    return response?.headers.get('X-TTS-Provider') || null;
+  } catch {
+    return null;
   }
 }
 
@@ -95,6 +108,7 @@ export interface VoiceTestState {
   errorMessage: string | null;
   spokenText: string;
   cloudTtsUsed?: boolean;
+  cloudTtsProvider?: string | null;
 }
 
 export interface AudioDiagnostics {
@@ -117,6 +131,7 @@ class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
   private speechSessionId: number = 0;
+  private lastTtsProvider: string | null = null;
   private availableVoices: SpeechSynthesisVoice[] = [];
   private selectedArabicVoice: SpeechSynthesisVoice | null = null;
   private isSpeakingListeners: Array<(speaking: boolean) => void> = [];
@@ -286,8 +301,10 @@ class AudioManager {
 
     // 1. التحقق مما إذا كان النص موجوداً مسبقاً كملف صوتي في الـ Cache Storage
     let audioBlob: Blob | null = null;
+    this.lastTtsProvider = null;
     try {
       audioBlob = await getCachedAudioBlob(cacheKey);
+      if (audioBlob) this.lastTtsProvider = await getCachedAudioProvider(cacheKey) || 'cached/unknown';
     } catch {
       audioBlob = null;
     }
@@ -299,11 +316,13 @@ class AudioManager {
       try {
         const response = await fetch(`/api/tts?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(effectiveVoiceId)}`);
         if (response.ok) {
+          this.lastTtsProvider = response.headers.get('X-TTS-Provider') || 'unknown';
           audioBlob = await response.blob();
-          // حفظ الاستجابة في Cache Storage للأبد للاستخدام المستقبلي الفوري
-          saveCachedAudioBlob(cacheKey, audioBlob).catch(() => {});
+          // Keep the provider marker with the cached audio for truthful diagnostics.
+          saveCachedAudioBlob(cacheKey, audioBlob, this.lastTtsProvider).catch(() => {});
         }
       } catch {
+        this.lastTtsProvider = 'browser-google-fallback';
         // فشل الاتصال بالخادم، الانتقال للبدائل
       }
     }
@@ -313,6 +332,7 @@ class AudioManager {
       audioSourceUrl = URL.createObjectURL(audioBlob);
     } else {
       audioSourceUrl = `https://translate.google.com/translate_tts?client=tw-ob&tl=ar&q=${encodeURIComponent(cleanText)}`;
+      this.lastTtsProvider = 'browser-google-fallback';
     }
 
     // 4. إدارة التزامن: إيقاف أي أصوات سابقة حالية وإلغاء الـ speechSynthesis
@@ -654,6 +674,7 @@ class AudioManager {
       errorMessage: null,
       spokenText: 'أهلاً بك يا بطل! أنا الأسد لؤلؤ',
       cloudTtsUsed: false,
+      cloudTtsProvider: null,
     };
     onUpdate({ ...currentState });
 
@@ -681,7 +702,8 @@ class AudioManager {
     // تجربة الصوت السحابي عالي الجودة بالذكاء الاصطناعي أولاً
     try {
       currentState.speechStatus = 'speaking';
-      currentState.cloudTtsUsed = true;
+      currentState.cloudTtsUsed = false;
+      currentState.cloudTtsProvider = null;
       onUpdate({ ...currentState });
 
       const playedCloud = await this.generateAndPlayCloudAudio(
@@ -689,12 +711,16 @@ class AudioManager {
         undefined,
         () => {
           currentState.speechStatus = 'success';
-          currentState.cloudTtsUsed = true;
+          currentState.cloudTtsProvider = this.lastTtsProvider;
+          currentState.cloudTtsUsed = this.lastTtsProvider === 'elevenlabs';
           onUpdate({ ...currentState });
         }
       );
 
       if (playedCloud) {
+        currentState.cloudTtsProvider = this.lastTtsProvider;
+        currentState.cloudTtsUsed = this.lastTtsProvider === 'elevenlabs';
+        onUpdate({ ...currentState });
         return;
       }
     } catch {
