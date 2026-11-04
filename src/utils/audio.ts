@@ -355,7 +355,7 @@ class AudioManager {
           isDone = true;
           this.cleanupCurrentAudio();
           this.notifySpeaking(false);
-          if (onEnd) onEnd();
+          if (success && onEnd) onEnd();
           resolve(success);
         };
 
