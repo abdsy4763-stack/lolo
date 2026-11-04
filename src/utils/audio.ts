@@ -9,8 +9,9 @@ import { ParentVoiceClipKey } from '../types';
 import { Storage } from './storage';
 import { recordedVoices } from './recordedVoices';
 
-export const TTS_CACHE_NAME = 'kids-tts-audio-v2';
-export const DEFAULT_ELEVEN_VOICE_ID = 'I3u6waC588j43py1kDN2'; // Custom child-friendly Arabic voice
+export const TTS_CACHE_NAME = 'kids-tts-audio-v3';
+export const DEFAULT_ELEVEN_VOICE_ID = 'ar-EG-salma';
+export const DEFAULT_HETAF_VOICE_ID = 'ar-EG-salma';
 
 /**
  * مفتاح التخزين المؤقت في Cache Storage API
@@ -296,7 +297,7 @@ class AudioManager {
       return false;
     }
 
-    const effectiveVoiceId = voiceId || (import.meta.env.VITE_TTS_VOICE_ID as string) || DEFAULT_ELEVEN_VOICE_ID;
+    const effectiveVoiceId = voiceId || DEFAULT_HETAF_VOICE_ID;
     const cacheKey = getTtsCacheKey(cleanText, effectiveVoiceId);
 
     // 1. التحقق مما إذا كان النص موجوداً مسبقاً كملف صوتي في الـ Cache Storage
@@ -314,7 +315,7 @@ class AudioManager {
     // 2. إذا لم يكن في الكاش: طلب المقطع الصوتي من نقطة النهاية /api/tts
     if (!audioBlob) {
       try {
-        const response = await fetch(`/api/tts?text=${encodeURIComponent(cleanText)}&voice=${encodeURIComponent(effectiveVoiceId)}`);
+        const response = await fetch(`/api/tts?text=${encodeURIComponent(cleanText)}`);
         if (response.ok) {
           this.lastTtsProvider = response.headers.get('X-TTS-Provider') || 'unknown';
           audioBlob = await response.blob();
@@ -638,8 +639,8 @@ class AudioManager {
     const parentRecordings = Storage.getAllParentVoiceRecordings();
     const settings = Storage.getSettings();
     // The API key is server-side only; the browser can call /api/tts without seeing it.
-    const isCloudTtsConfigured = true;
-    const cloudVoiceId = (import.meta.env.VITE_TTS_VOICE_ID as string) || DEFAULT_ELEVEN_VOICE_ID;
+    const isCloudTtsConfigured = false; // Confirmed asynchronously by the server-side Hetaf diagnostics endpoint.
+    const cloudVoiceId = DEFAULT_HETAF_VOICE_ID;
 
     return {
       isUnlocked: this.isUnlocked,
@@ -699,35 +700,42 @@ class AudioManager {
       : null;
     onUpdate({ ...currentState });
 
-    // تجربة الصوت السحابي عالي الجودة بالذكاء الاصطناعي أولاً
+    // اختبار اتصال Hetaf أولاً؛ لا نعلن نجاح الاختبار اعتماداً على Web Speech أو مزود آخر.
     try {
+      const diagnosticResponse = await fetch('/api/tts?diagnostics=1', { cache: 'no-store' });
+      const diagnostic = await diagnosticResponse.json();
+      if (!diagnosticResponse.ok || !diagnostic.connected || !diagnostic.voiceAvailable) {
+        throw new Error(diagnostic.error?.message || 'تعذر الاتصال بـ Hetaf أو العثور على صوت Salma.');
+      }
+
+      currentState.spokenText = 'أهلاً بك يا بطل! أنا سلمى';
       currentState.speechStatus = 'speaking';
-      currentState.cloudTtsUsed = false;
-      currentState.cloudTtsProvider = null;
       onUpdate({ ...currentState });
 
       const playedCloud = await this.generateAndPlayCloudAudio(
-        'أهلاً بك يا بطل! أنا الأسد لؤلؤ',
-        undefined,
-        () => {
-          currentState.speechStatus = 'success';
-          currentState.cloudTtsProvider = this.lastTtsProvider;
-          currentState.cloudTtsUsed = this.lastTtsProvider === 'elevenlabs';
-          onUpdate({ ...currentState });
-        }
+        currentState.spokenText,
+        DEFAULT_HETAF_VOICE_ID
       );
 
-      if (playedCloud) {
-        currentState.cloudTtsProvider = this.lastTtsProvider;
-        currentState.cloudTtsUsed = this.lastTtsProvider === 'elevenlabs';
-        onUpdate({ ...currentState });
-        return;
+      if (!playedCloud || this.lastTtsProvider !== 'hetaf') {
+        throw new Error('لم يتم تشغيل صوت Hetaf Salma؛ لم يتم اعتماد الاختبار.');
       }
-    } catch {
-      // الانتقال للـ Web Speech
+
+      currentState.speechStatus = 'success';
+      currentState.cloudTtsUsed = true;
+      currentState.cloudTtsProvider = 'hetaf';
+      onUpdate({ ...currentState });
+      return;
+    } catch (error) {
+      currentState.speechStatus = 'error';
+      currentState.cloudTtsUsed = false;
+      currentState.cloudTtsProvider = null;
+      currentState.errorMessage = error instanceof Error ? error.message : 'فشل اختبار Hetaf Salma.';
+      onUpdate({ ...currentState });
+      return;
     }
 
-    // الخطة البديلة: فحص ونطق Web Speech API
+    //
     currentState.cloudTtsUsed = false;
     if (typeof window === 'undefined' || !window.speechSynthesis) {
       currentState.speechStatus = 'error';
