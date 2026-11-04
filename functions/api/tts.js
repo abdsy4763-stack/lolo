@@ -38,7 +38,7 @@ async function getArabicVoices(apiKey) {
   });
   if (!response.ok) return { ok: false, status: response.status, error: await readError(response) };
   const payload = await response.json();
-  const voices = Array.isArray(payload?.data) ? payload.data : [];
+  const voices = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.voices) ? payload.voices : [];
   const salma = voices.find(voice => voice.id === DEFAULT_VOICE_ID);
   return { ok: true, salma };
 }
