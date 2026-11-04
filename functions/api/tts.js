@@ -153,6 +153,19 @@ export async function onRequestGet(context) {
       return jsonResponse(await checkElevenLabs(apiKey, voiceId));
     }
 
+    // Synthesis test checks the actual text-to-speech permission, model access and audio generation.
+    if (url.searchParams.get("test") === "1") {
+      if (!apiKey) {
+        return jsonResponse({ ok: false, provider: "google-fallback", error: { code: "missing_api_key", message: "ELEVENLABS_API_KEY is not configured." } }, 200);
+      }
+      const testText = (url.searchParams.get("text") || "مرحباً، هذا اختبار لصوت فاطمة").trim();
+      const result = await createElevenLabsAudio(apiKey, voiceId, testText);
+      if (!result.ok) {
+        return jsonResponse({ ok: false, provider: "google-fallback", voiceId, error: result.error }, 200);
+      }
+      return jsonResponse({ ok: true, provider: "elevenlabs", voiceId, audioBytes: result.audio.byteLength, message: "ElevenLabs generated audio successfully." });
+    }
+
     const text = (url.searchParams.get("text") || "").trim();
     if (!text) {
       return jsonResponse({ error: "Text parameter is required" }, 400);
