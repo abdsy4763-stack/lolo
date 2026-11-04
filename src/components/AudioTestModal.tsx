@@ -168,7 +168,7 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
                   {testState.cloudTtsUsed && (
                     <div className="text-xs font-bold text-indigo-700 flex items-center gap-1.5 bg-indigo-50 p-2 rounded-xl border border-indigo-200">
                       <CloudLightning className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>المحرك المستخدم: صوت الذكاء الاصطناعي السحابي الطبيعي (Cloud AI Voice) ⚡</span>
+                      <span>المحرك المستخدم: Hetaf — صوت سلمى المصري (ar-EG-salma) ⚡</span>
                     </div>
                   )}
 
@@ -229,10 +229,10 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold text-indigo-950 flex items-center gap-1.5">
                       <CloudLightning className="w-4 h-4 text-indigo-600" />
-                      <span>نظام الصوت السحابي والذاكرة المؤقتة (Cloud AI TTS):</span>
+                      <span>Hetaf TTS — صوت سلمى (ar-EG-salma):</span>
                     </span>
                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      نشط وجاهز للتشغيل ⚡
+                      المزوّد المحدد: Hetaf
                     </span>
                   </div>
 
@@ -276,7 +276,7 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
                   </div>
 
                   <p className="text-[11px] text-indigo-900 leading-relaxed font-medium">
-                    ⚡ يحفظ النظام الأصوات في الـ Cache Storage بعد أول تشغيل، لتشغيلها لاحقاً بسرعة البرق وبدون الحاجة لإنترنت أو استهلاك رصيد.
+                    ⚡ يتم حفظ صوت Hetaf بعد توليده في ذاكرة المتصفح لتقليل طلبات التوليد اللاحقة. لم يتم إجراء اختبار اتصال أو توليد فعلي ضمن هذا التعديل.
                   </p>
                 </div>
 

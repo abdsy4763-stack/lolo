@@ -1,215 +1,145 @@
-const DEFAULT_VOICE_ID = "I3u6waC588j43py1kDN2";
+const DEFAULT_VOICE_ID = "ar-EG-salma";
 const MAX_TEXT_LENGTH = 1000;
+const HETAF_BASE_URL = "https://api.hetaf.ai";
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
 
-function getErrorInfo(payload, status) {
-  const detail = payload?.detail || payload?.error || payload;
-  const code = typeof detail?.status === "string"
-    ? detail.status
-    : typeof detail?.code === "string"
-      ? detail.code
-      : `http_${status}`;
-  const message = typeof detail?.message === "string"
-    ? detail.message
-    : typeof detail === "string"
-      ? detail
-      : `ElevenLabs returned HTTP ${status}`;
-  return { code, message: message.slice(0, 400) };
+function getApiKey(context) {
+  return String(context.env?.HETAF_API_KEY || "").trim();
 }
 
-async function readElevenLabsError(response) {
+function safeError(payload, status) {
+  const detail = payload?.detail || payload?.error || payload?.message;
+  const message = typeof detail === "string"
+    ? detail
+    : Array.isArray(detail)
+      ? detail.map(item => item?.msg || item?.message || "").filter(Boolean).join("; ")
+      : `Hetaf returned HTTP ${status}`;
+  return { code: payload?.error || `http_${status}`, message: message.slice(0, 400) };
+}
+
+async function readError(response) {
   try {
-    return getErrorInfo(await response.clone().json(), response.status);
+    return safeError(await response.clone().json(), response.status);
   } catch {
-    return { code: `http_${response.status}`, message: `ElevenLabs returned HTTP ${response.status}` };
+    return { code: `http_${response.status}`, message: `Hetaf returned HTTP ${response.status}` };
   }
 }
 
-function resolveConfig(context, url) {
-  const env = context.env || {};
-  const apiKey = (env.ELEVENLABS_API_KEY || env.VITE_TTS_API_KEY || "").trim();
-  const voiceId = (url.searchParams.get("voice") || env.VITE_TTS_VOICE_ID || DEFAULT_VOICE_ID).trim();
-  return { apiKey, voiceId };
+async function getArabicVoices(apiKey) {
+  const response = await fetch(`${HETAF_BASE_URL}/api/v1/voices?language=ar`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) return { ok: false, status: response.status, error: await readError(response) };
+  const payload = await response.json();
+  const voices = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.voices) ? payload.voices : [];
+  const salma = voices.find(voice => voice.id === DEFAULT_VOICE_ID);
+  return { ok: true, salma };
 }
 
-async function checkElevenLabs(apiKey, voiceId) {
+async function diagnostics(context) {
+  const apiKey = getApiKey(context);
   if (!apiKey) {
-    return {
-      configured: false,
-      connected: false,
-      provider: "google-fallback",
-      voiceId,
-      error: { code: "missing_api_key", message: "ELEVENLABS_API_KEY is not configured for this Pages environment." },
-    };
+    return jsonResponse({
+      configured: false, connected: false, provider: "hetaf",
+      voiceId: DEFAULT_VOICE_ID, voiceName: "Salma",
+      error: { code: "missing_api_key", message: "HETAF_API_KEY is not configured for this Pages environment." },
+    }, 503);
   }
 
   try {
-    const response = await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(voiceId)}`, {
-      method: "GET",
-      headers: { "xi-api-key": apiKey },
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (response.ok) {
-      const voice = await response.json().catch(() => ({}));
-      return {
-        configured: true,
-        connected: true,
-        provider: "elevenlabs",
-        voiceId,
-        voiceName: typeof voice.name === "string" ? voice.name : null,
-      };
+    const result = await getArabicVoices(apiKey);
+    if (!result.ok) {
+      return jsonResponse({
+        configured: true, connected: false, provider: "hetaf",
+        voiceId: DEFAULT_VOICE_ID, voiceName: "Salma", error: result.error,
+      }, result.status);
     }
-
-    return {
-      configured: true,
-      connected: false,
-      provider: "google-fallback",
-      voiceId,
-      error: await readElevenLabsError(response),
-    };
-  } catch (error) {
-    return {
-      configured: true,
-      connected: false,
-      provider: "google-fallback",
-      voiceId,
-      error: { code: "network_error", message: error instanceof Error ? error.message : "Could not reach ElevenLabs." },
-    };
-  }
-}
-
-async function createElevenLabsAudio(apiKey, voiceId, text) {
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-        "xi-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
-      signal: AbortSignal.timeout(25000),
-    },
-  );
-
-  if (!response.ok) {
-    return { ok: false, error: await readElevenLabsError(response) };
-  }
-
-  const audio = await response.arrayBuffer();
-  if (!audio.byteLength) {
-    return { ok: false, error: { code: "empty_audio", message: "ElevenLabs returned an empty audio response." } };
-  }
-  return { ok: true, audio };
-}
-
-async function createGoogleFallback(text, reason) {
-  const googleUrl = `https://translate.google.com/translate_tts?client=tw-ob&tl=ar&q=${encodeURIComponent(text)}`;
-  const response = await fetch(googleUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-  });
-
-  if (!response.ok) {
+    if (!result.salma) {
+      return jsonResponse({
+        configured: true, connected: true, provider: "hetaf",
+        voiceId: DEFAULT_VOICE_ID, voiceAvailable: false,
+        error: { code: "voice_not_found", message: "Hetaf is reachable, but ar-EG-salma was not found in the Arabic voice catalogue." },
+      }, 404);
+    }
     return jsonResponse({
-      error: "TTS unavailable",
-      provider: "unavailable",
-      elevenLabsError: reason || null,
+      configured: true, connected: true, provider: "hetaf",
+      voiceId: result.salma.id, voiceName: result.salma.name,
+      voiceAvailable: true, language: "ar", accent: result.salma.accent || "egyptian",
+    });
+  } catch (error) {
+    return jsonResponse({
+      configured: true, connected: false, provider: "hetaf",
+      voiceId: DEFAULT_VOICE_ID, voiceName: "Salma",
+      error: { code: "network_error", message: error instanceof Error ? error.message : "Could not reach Hetaf." },
     }, 502);
   }
+}
 
-  return new Response(await response.arrayBuffer(), {
-    status: 200,
+async function synthesize(apiKey, text) {
+  const response = await fetch(`${HETAF_BASE_URL}/api/v1/tts`, {
+    method: "POST",
     headers: {
-      "Content-Type": "audio/mpeg",
-      "Cache-Control": "no-store",
-      "X-TTS-Provider": "google-fallback",
-      "X-TTS-Fallback": "true",
-      "X-TTS-Error-Code": reason?.code || "elevenlabs_unavailable",
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "audio/wav",
     },
+    body: JSON.stringify({
+      text,
+      voice: DEFAULT_VOICE_ID,
+      language: "ar",
+      model: "hetaf-tts",
+      format: "wav",
+    }),
+    signal: AbortSignal.timeout(30000),
   });
+  if (!response.ok) return { ok: false, status: response.status, error: await readError(response) };
+  const audio = await response.arrayBuffer();
+  if (!audio.byteLength) {
+    return { ok: false, status: 502, error: { code: "empty_audio", message: "Hetaf returned an empty audio response." } };
+  }
+  return { ok: true, audio, requestId: response.headers.get("X-Request-Id"), credits: response.headers.get("X-Hetaf-Credits-Charged") };
 }
 
 export async function onRequestGet(context) {
+  const url = new URL(context.request.url);
+  if (url.searchParams.get("diagnostics") === "1") return diagnostics(context);
+
+  const text = (url.searchParams.get("text") || "").trim();
+  if (!text) return jsonResponse({ error: "Text parameter is required" }, 400);
+  if (text.length > MAX_TEXT_LENGTH) {
+    return jsonResponse({ error: `Text must be ${MAX_TEXT_LENGTH} characters or fewer` }, 413);
+  }
+
+  const apiKey = getApiKey(context);
+  if (!apiKey) {
+    return jsonResponse({
+      error: "TTS is not configured",
+      provider: "hetaf",
+      details: { code: "missing_api_key", message: "HETAF_API_KEY is not configured for this Pages environment." },
+    }, 503);
+  }
+
   try {
-    const url = new URL(context.request.url);
-    const { apiKey, voiceId } = resolveConfig(context, url);
-
-    // Diagnostic mode validates the real API key and the configured voice without generating audio.
-    if (url.searchParams.get("diagnostics") === "1") {
-      return jsonResponse(await checkElevenLabs(apiKey, voiceId));
-    }
-
-    // Synthesis test checks the actual text-to-speech permission, model access and audio generation.
-    if (url.searchParams.get("test") === "1") {
-      if (!apiKey) {
-        return jsonResponse({ ok: false, provider: "google-fallback", error: { code: "missing_api_key", message: "ELEVENLABS_API_KEY is not configured." } }, 200);
-      }
-      const testText = (url.searchParams.get("text") || "مرحباً، هذا اختبار لصوت فاطمة").trim();
-      const result = await createElevenLabsAudio(apiKey, voiceId, testText);
-      if (!result.ok) {
-        return jsonResponse({ ok: false, provider: "google-fallback", voiceId, error: result.error }, 200);
-      }
-      return jsonResponse({ ok: true, provider: "elevenlabs", voiceId, audioBytes: result.audio.byteLength, message: "ElevenLabs generated audio successfully." });
-    }
-
-    const text = (url.searchParams.get("text") || "").trim();
-    if (!text) {
-      return jsonResponse({ error: "Text parameter is required" }, 400);
-    }
-    if (text.length > MAX_TEXT_LENGTH) {
-      return jsonResponse({ error: `Text must be ${MAX_TEXT_LENGTH} characters or fewer` }, 413);
-    }
-
-    let elevenLabsError = null;
-    if (apiKey) {
-      try {
-        const result = await createElevenLabsAudio(apiKey, voiceId, text);
-        if (result.ok) {
-          return new Response(result.audio, {
-            status: 200,
-            headers: {
-              "Content-Type": "audio/mpeg",
-              "Cache-Control": "public, max-age=604800",
-              "X-TTS-Provider": "elevenlabs",
-              "X-TTS-Voice": voiceId,
-            },
-          });
-        }
-        elevenLabsError = result.error;
-        console.warn("ElevenLabs TTS request rejected:", result.error.code, result.error.message);
-      } catch (error) {
-        elevenLabsError = {
-          code: "network_error",
-          message: error instanceof Error ? error.message : "ElevenLabs request failed.",
-        };
-        console.error("ElevenLabs TTS request failed:", elevenLabsError.code);
-      }
-    } else {
-      elevenLabsError = {
-        code: "missing_api_key",
-        message: "ELEVENLABS_API_KEY is not configured for this Pages environment.",
-      };
-      console.warn("ElevenLabs TTS skipped: API key is not configured.");
-    }
-
-    // Keep the existing audio fallback for availability, but label it explicitly.
-    return await createGoogleFallback(text, elevenLabsError);
+    const result = await synthesize(apiKey, text);
+    if (!result.ok) return jsonResponse({ error: "Hetaf TTS request failed", provider: "hetaf", details: result.error }, result.status);
+    const headers = {
+      "Content-Type": "audio/wav",
+      "Cache-Control": "no-store",
+      "X-TTS-Provider": "hetaf",
+      "X-TTS-Voice": DEFAULT_VOICE_ID,
+    };
+    if (result.requestId) headers["X-Hetaf-Request-Id"] = result.requestId;
+    if (result.credits) headers["X-Hetaf-Credits-Charged"] = result.credits;
+    return new Response(result.audio, { status: 200, headers });
   } catch (error) {
-    console.error("TTS endpoint error:", error instanceof Error ? error.message : "unknown");
-    return jsonResponse({ error: "TTS service temporarily unavailable" }, 500);
+    console.error("Hetaf TTS request failed:", error instanceof Error ? error.message : "unknown");
+    return jsonResponse({ error: "Hetaf TTS service temporarily unavailable", provider: "hetaf" }, 502);
   }
 }
