@@ -617,7 +617,8 @@ class AudioManager {
     );
     const parentRecordings = Storage.getAllParentVoiceRecordings();
     const settings = Storage.getSettings();
-    const isCloudTtsConfigured = !!(import.meta.env.VITE_TTS_API_KEY as string)?.trim();
+    // The API key is server-side only; the browser can call /api/tts without seeing it.
+    const isCloudTtsConfigured = true;
     const cloudVoiceId = (import.meta.env.VITE_TTS_VOICE_ID as string) || DEFAULT_ELEVEN_VOICE_ID;
 
     return {

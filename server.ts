@@ -6,6 +6,10 @@ dotenv.config({ override: true });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const MAX_TTS_TEXT_LENGTH = 1000;
+const TTS_RATE_LIMIT = 30;
+const TTS_RATE_WINDOW_MS = 60_000;
+const ttsRate = new Map<string, { count: number; windowStarted: number }>();
 
 app.use(express.json());
 
@@ -19,8 +23,21 @@ app.get('/api/tts', async (req, res) => {
     if (!text) {
       return res.status(400).json({ error: 'Text parameter is required' });
     }
+    if (text.length > MAX_TTS_TEXT_LENGTH) {
+      return res.status(413).json({ error: `Text must be ${MAX_TTS_TEXT_LENGTH} characters or fewer` });
+    }
+    const clientKey = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const current = ttsRate.get(clientKey);
+    if (!current || now - current.windowStarted >= TTS_RATE_WINDOW_MS) {
+      ttsRate.set(clientKey, { count: 1, windowStarted: now });
+    } else if (current.count >= TTS_RATE_LIMIT) {
+      return res.status(429).json({ error: 'Too many TTS requests; try again later' });
+    } else {
+      current.count += 1;
+    }
 
-    const elevenKey = process.env.VITE_TTS_API_KEY || process.env.ELEVENLABS_API_KEY;
+    const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_TTS_API_KEY;
     const voiceId = (req.query.voice as string) || process.env.VITE_TTS_VOICE_ID || 'I3u6waC588j43py1kDN2';
 
     // 1. استخدام ElevenLabs إذا وُجد المفتاح في البيئة
@@ -103,7 +120,7 @@ app.get('/api/tts', async (req, res) => {
 
 // فحص حالة خدمة الصوت ومفتاح ElevenLabs
 app.get('/api/tts/status', async (_req, res) => {
-  const elevenKey = process.env.VITE_TTS_API_KEY || process.env.ELEVENLABS_API_KEY;
+  const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_TTS_API_KEY;
   const configuredVoice = process.env.VITE_TTS_VOICE_ID || 'I3u6waC588j43py1kDN2';
 
   if (!elevenKey || !elevenKey.trim()) {
