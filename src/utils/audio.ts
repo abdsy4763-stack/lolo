@@ -290,7 +290,8 @@ class AudioManager {
   public async generateAndPlayCloudAudio(
     text: string, 
     voiceId?: string, 
-    onEnd?: () => void
+    onEnd?: () => void,
+    requireHetaf = false
   ): Promise<boolean> {
     const cleanText = text.trim();
     if (!cleanText || typeof window === 'undefined') {
@@ -318,15 +319,25 @@ class AudioManager {
         const response = await fetch(`/api/tts?text=${encodeURIComponent(cleanText)}`);
         if (response.ok) {
           this.lastTtsProvider = response.headers.get('X-TTS-Provider') || 'unknown';
+          if (requireHetaf && this.lastTtsProvider !== 'hetaf') {
+            throw new Error('The TTS endpoint did not return Hetaf audio.');
+          }
           audioBlob = await response.blob();
-          // Keep the provider marker with the cached audio for truthful diagnostics.
           saveCachedAudioBlob(cacheKey, audioBlob, this.lastTtsProvider).catch(() => {});
+        } else if (requireHetaf) {
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.details?.message || failure.error || 'Hetaf TTS request failed.');
         }
-      } catch {
+      } catch (error) {
+        if (requireHetaf) {
+          this.lastTtsProvider = 'hetaf-error';
+          throw error;
+        }
         this.lastTtsProvider = 'browser-google-fallback';
-        // فشل الاتصال بالخادم، الانتقال للبدائل
       }
     }
+
+    if (requireHetaf && !audioBlob) return false;
 
     // 3. تحديد مصدر الصوت: إما Object URL من Blob أو البث المباشر المتاح دائماً
     if (audioBlob) {
@@ -714,7 +725,9 @@ class AudioManager {
 
       const playedCloud = await this.generateAndPlayCloudAudio(
         currentState.spokenText,
-        DEFAULT_HETAF_VOICE_ID
+        DEFAULT_HETAF_VOICE_ID,
+        undefined,
+        true
       );
 
       if (!playedCloud || this.lastTtsProvider !== 'hetaf') {
@@ -735,50 +748,6 @@ class AudioManager {
       return;
     }
 
-    //
-    currentState.cloudTtsUsed = false;
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      currentState.speechStatus = 'error';
-      currentState.errorMessage = 'المتصفح لا يدعم Web Speech API';
-      onUpdate({ ...currentState });
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
-
-      const utterance = new SpeechSynthesisUtterance('هذا اختبار للصوت');
-      utterance.lang = 'ar-SA';
-      utterance.rate = 0.8;
-      utterance.pitch = 1.15;
-      if (this.selectedArabicVoice) {
-        utterance.voice = this.selectedArabicVoice;
-      }
-
-      utterance.onstart = () => {
-        currentState.speechStatus = 'speaking';
-        onUpdate({ ...currentState });
-      };
-      utterance.onend = () => {
-        currentState.speechStatus = 'success';
-        onUpdate({ ...currentState });
-      };
-      utterance.onerror = (e: SpeechSynthesisErrorEvent) => {
-        currentState.speechStatus = 'error';
-        currentState.errorMessage = e.error || 'خطأ غير معروف';
-        onUpdate({ ...currentState });
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'استثناء أثناء التشغيل';
-      currentState.speechStatus = 'error';
-      currentState.errorMessage = msg;
-      onUpdate({ ...currentState });
-    }
   }
 }
 
