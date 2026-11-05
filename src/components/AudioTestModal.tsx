@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Sparkles, MessageSquare, Database, Trash2, CloudLightning } from 'lucide-react';
+import { X, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Sparkles, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { audioManager, VoiceTestState, getAudioCacheCount, clearAudioCache } from '../utils/audio';
+import { audioManager, VoiceTestState } from '../utils/audio';
 
 interface AudioTestModalProps {
   isOpen: boolean;
@@ -11,25 +11,9 @@ interface AudioTestModalProps {
 export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose }) => {
   const [testState, setTestState] = useState<VoiceTestState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [cacheCount, setCacheCount] = useState<number>(0);
-
-  const refreshCacheCount = async () => {
-    try {
-      const count = await getAudioCacheCount();
-      setCacheCount(count);
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleClearCache = async () => {
-    await clearAudioCache();
-    await refreshCacheCount();
-  };
 
   const startTest = async () => {
     setIsRunning(true);
-    await refreshCacheCount();
     await audioManager.runLiveVoiceTest(state => {
       setTestState(state);
       if (state.speechStatus === 'success' || state.speechStatus === 'error') {
@@ -41,7 +25,6 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
   useEffect(() => {
     if (isOpen) {
       startTest();
-      refreshCacheCount();
     } else {
       setTestState(null);
       setIsRunning(false);
@@ -165,12 +148,7 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
                     </span>
                   </div>
 
-                  {testState.cloudTtsUsed && (
-                    <div className="text-xs font-bold text-indigo-700 flex items-center gap-1.5 bg-indigo-50 p-2 rounded-xl border border-indigo-200">
-                      <CloudLightning className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>المحرك المستخدم: Hetaf — صوت سلمى المصري (ar-EG-salma) ⚡</span>
-                    </div>
-                  )}
+
 
                   {/* تفاصيل الخطأ في حال onerror */}
                   {testState.errorMessage && (
@@ -224,63 +202,7 @@ export const AudioTestModal: React.FC<AudioTestModalProps> = ({ isOpen, onClose 
                   </div>
                 </div>
 
-                {/* 6. نظام الصوت السحابي والذاكرة المؤقتة (Cloud AI TTS + Cache Storage) */}
-                <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border-2 border-indigo-200 shadow-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-indigo-950 flex items-center gap-1.5">
-                      <CloudLightning className="w-4 h-4 text-indigo-600" />
-                      <span>Hetaf TTS — صوت سلمى (ar-EG-salma):</span>
-                    </span>
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      المزوّد المحدد: Hetaf
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setIsRunning(true);
-                        await audioManager.generateAndPlayCloudAudio('أهلاً بك يا بطل! تم توليد هذا الصوت السحابي بنجاح', undefined, () => {
-                          setIsRunning(false);
-                          refreshCacheCount();
-                        });
-                      }}
-                      className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                      <span>تجربة صوت الذكاء الاصطناعي الآن</span>
-                    </button>
-                  </div>
-
-                  <div className="p-2.5 bg-white rounded-xl border border-indigo-100 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-slate-700 font-bold">
-                      <Database className="w-4 h-4 text-indigo-500" />
-                      <span>الملفات الصوتية المخزنة في المتصفح (Cache Storage):</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
-                        {cacheCount} مقطع صوتي
-                      </span>
-                      {cacheCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleClearCache}
-                          className="p-1 rounded-lg hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                          title="مسح الذاكرة المؤقتة"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-indigo-900 leading-relaxed font-medium">
-                    ⚡ يتم حفظ صوت Hetaf بعد توليده في ذاكرة المتصفح لتقليل طلبات التوليد اللاحقة. لم يتم إجراء اختبار اتصال أو توليد فعلي ضمن هذا التعديل.
-                  </p>
-                </div>
-
-                {/* 7. نص الحوار الاحتياطي للطفل */}
+                {/* 6. نص الحوار الاحتياطي للطفل */}
                 <div className="p-4 bg-amber-100/90 border-3 border-amber-300 rounded-2xl shadow-inner space-y-2">
                   <div className="flex items-center gap-1.5 text-xs font-black text-amber-900">
                     <MessageSquare className="w-4 h-4 text-amber-700" />
