@@ -49,6 +49,8 @@ import { StageMemoryGame } from './components/stages/StageMemoryGame';
 import { StageZenBubbles } from './components/stages/StageZenBubbles';
 import { StageSharing } from './components/stages/StageSharing';
 import { StageEmpathy } from './components/stages/StageEmpathy';
+import { StageBrainGames } from './components/stages/StageBrainGames';
+import { BrainGamesHub } from './components/BrainGamesHub';
 
 // بيانات الحلقات الأساسية التي تعكس القصة المتسلسلة
 interface EpisodeBaseConfig {
@@ -416,6 +418,11 @@ export default function App() {
     );
   }
 
+  // ألعاب الذكاء الإضافية المرتبطة بمحطاتها الأساسية
+  if (activeStage === 'decision_maze' || activeStage === 'robot_programming' || activeStage === 'pattern_secret') {
+    return <StageBrainGames game={activeStage} onBack={handleBackFromStage} onEarnStar={handleEarnStar} />;
+  }
+
   // إذا كانت اللعبة المصغرة نشطة حالياً، يتم عرضها
   if (activeStage === 'sharing') {
     return <StageSharing onBack={handleBackFromStage} onEarnStar={handleEarnStar} />;
@@ -639,6 +646,9 @@ export default function App() {
             ))}
           </div>
         </div>
+
+        {/* تحديات الذكاء الإضافية التي تفتح بعد إكمال المحطات المحددة */}
+        <BrainGamesHub completedStages={completedStages} onSelect={(game) => setActiveStage(game)} />
 
         {/* خريطة العالم التفاعلية المتعرجة (Zig-Zag World Map) */}
         <div className="w-full">
