@@ -221,15 +221,19 @@ export default function App() {
     setCompletedStages(Storage.getCompletedStageIds());
     setCompletedEpisodeIds(Storage.getCompletedEpisodeIds());
 
+    // لا ينبغي أن يستمر العداد أثناء شاشة النوم أو لوحة الوالدين؛
+    // وإلا سيعيد تفعيل شاشة النوم فور فتح اللوحة من شاشة انتهاء الوقت.
+    if (isSleepMode || isParentOpen) return;
+
     const interval = setInterval(() => {
       const secs = Storage.incrementPlaySeconds(5);
       const limitSecs = settings.dailyLimitMinutes * 60;
-      if (settings.dailyLimitMinutes < 999 && secs >= limitSecs) {
+      if (!isParentOpen && !isSleepMode && settings.dailyLimitMinutes < 999 && secs >= limitSecs) {
         setIsSleepMode(true);
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [settings.dailyLimitMinutes]);
+  }, [settings.dailyLimitMinutes, isParentOpen, isSleepMode]);
 
   // نطق ترحيبي عند فتح التطبيق
   useEffect(() => {
