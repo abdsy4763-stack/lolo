@@ -419,7 +419,7 @@ export default function App() {
   }
 
   // ألعاب الذكاء الإضافية المرتبطة بمحطاتها الأساسية
-  if (activeStage === 'decision_maze' || activeStage === 'robot_programming' || activeStage === 'pattern_secret') {
+  if (activeStage === 'decision_maze' || activeStage === 'pattern_secret' || activeStage === 'balance_scale' || activeStage === 'spot_difference') {
     return <StageBrainGames game={activeStage} onBack={handleBackFromStage} onEarnStar={handleEarnStar} />;
   }
 
