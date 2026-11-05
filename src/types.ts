@@ -40,8 +40,9 @@ export type StageId =
   | 'sharing'
   | 'empathy'
   | 'decision_maze'
-  | 'robot_programming'
-  | 'pattern_secret';
+  | 'pattern_secret'
+  | 'balance_scale'
+  | 'spot_difference';
 
 export interface StageInfo {
   id: StageId;
