@@ -10,91 +10,6 @@ import { Storage } from './storage';
 import { recordedVoices } from './recordedVoices';
 import { getLocalAiAudioUrl } from './aiVoices';
 
-export const TTS_CACHE_NAME = 'kids-tts-audio-v3';
-export const DEFAULT_ELEVEN_VOICE_ID = 'ar-EG-salma';
-export const DEFAULT_HETAF_VOICE_ID = 'ar-EG-salma';
-
-/**
- * مفتاح التخزين المؤقت في Cache Storage API
- */
-export function getTtsCacheKey(text: string, voiceId: string): string {
-  const normalized = text.trim().replace(/\s+/g, ' ');
-  return `https://kids-tts.local/v1/${encodeURIComponent(voiceId)}/${encodeURIComponent(normalized)}`;
-}
-
-/**
- * استرجاع ملف صوتي مخزن مؤقتاً في متصفح المستخدم
- */
-export async function getCachedAudioBlob(cacheKey: string): Promise<Blob | null> {
-  if (typeof window === 'undefined' || !('caches' in window)) return null;
-  try {
-    const cache = await caches.open(TTS_CACHE_NAME);
-    const matched = await cache.match(cacheKey);
-    if (matched) {
-      return await matched.blob();
-    }
-  } catch {
-    // fallback if cache access fails
-  }
-  return null;
-}
-
-/**
- * حفظ ملف صوتي في Cache Storage API للمتصفح لإعادة استخدامه بدون استهلاك الإنترنت أو الرصيد
- */
-export async function saveCachedAudioBlob(cacheKey: string, blob: Blob, provider = 'unknown'): Promise<void> {
-  if (typeof window === 'undefined' || !('caches' in window)) return;
-  try {
-    const cache = await caches.open(TTS_CACHE_NAME);
-    const headers = new Headers();
-    headers.set('Content-Type', blob.type || 'audio/mpeg');
-    headers.set('Content-Length', blob.size.toString());
-    headers.set('X-TTS-Provider', provider);
-    const response = new Response(blob, { headers });
-    await cache.put(cacheKey, response);
-  } catch {
-    // ignore cache write errors
-  }
-}
-
-/** Read the provider stored with a cached audio response. */
-export async function getCachedAudioProvider(cacheKey: string): Promise<string | null> {
-  if (typeof window === 'undefined' || !('caches' in window)) return null;
-  try {
-    const cache = await caches.open(TTS_CACHE_NAME);
-    const response = await cache.match(cacheKey);
-    return response?.headers.get('X-TTS-Provider') || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * حذف ذاكرة التخزين المؤقت للصوتيات عند الرغبة في تحرير المساحة
- */
-export async function clearAudioCache(): Promise<boolean> {
-  if (typeof window === 'undefined' || !('caches' in window)) return false;
-  try {
-    return await caches.delete(TTS_CACHE_NAME);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * الحصول على عدد المقاطع الصوتية المخزنة محلياً
- */
-export async function getAudioCacheCount(): Promise<number> {
-  if (typeof window === 'undefined' || !('caches' in window)) return 0;
-  try {
-    const cache = await caches.open(TTS_CACHE_NAME);
-    const keys = await cache.keys();
-    return keys.length;
-  } catch {
-    return 0;
-  }
-}
-
 export interface DialogueAudioEntry {
   text?: string;
   voice?: string;
@@ -109,8 +24,6 @@ export interface VoiceTestState {
   speechStatus: 'idle' | 'starting' | 'speaking' | 'success' | 'error';
   errorMessage: string | null;
   spokenText: string;
-  cloudTtsUsed?: boolean;
-  cloudTtsProvider?: string | null;
 }
 
 export interface AudioDiagnostics {
@@ -122,8 +35,6 @@ export interface AudioDiagnostics {
   arabicVoiceList: string[];
   parentRecordingsCount: number;
   activeVoiceMode: string;
-  isCloudTtsConfigured: boolean;
-  cloudVoiceId: string;
 }
 
 class AudioManager {
@@ -133,7 +44,6 @@ class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
   private speechSessionId: number = 0;
-  private lastTtsProvider: string | null = null;
   private availableVoices: SpeechSynthesisVoice[] = [];
   private selectedArabicVoice: SpeechSynthesisVoice | null = null;
   private isSpeakingListeners: Array<(speaking: boolean) => void> = [];
@@ -280,127 +190,6 @@ class AudioManager {
     }
   }
 
-  /**
-   * توليد الصوت السحابي عالي الجودة بالذكاء الاصطناعي مع تخزين ذكي في Cache Storage
-   * - يفحص الكاش أولاً للتشغيل الفوري بدون إنترنت
-   * - يطلب الصوت من نقطة نهاية التطبيق السحابية /api/tts (التي تدعم ElevenLabs أو المحرك الصوتي الطبيعي)
-   * - يدعم البث الصوتي المباشر كخطة بديلة ثانية
-   * - إدارة التزامن وإلغاء أي أصوات سابقة لمنع التداخل
-   * - تنظيف الذاكرة عبر revokeObjectURL
-   */
-  public async generateAndPlayCloudAudio(
-    text: string, 
-    voiceId?: string, 
-    onEnd?: () => void,
-    requireHetaf = false
-  ): Promise<boolean> {
-    const cleanText = text.trim();
-    if (!cleanText || typeof window === 'undefined') {
-      return false;
-    }
-
-    const effectiveVoiceId = voiceId || DEFAULT_HETAF_VOICE_ID;
-    const cacheKey = getTtsCacheKey(cleanText, effectiveVoiceId);
-
-    // 1. التحقق مما إذا كان النص موجوداً مسبقاً كملف صوتي في الـ Cache Storage
-    let audioBlob: Blob | null = null;
-    this.lastTtsProvider = null;
-    try {
-      audioBlob = await getCachedAudioBlob(cacheKey);
-      if (audioBlob) this.lastTtsProvider = await getCachedAudioProvider(cacheKey) || 'cached/unknown';
-    } catch {
-      audioBlob = null;
-    }
-
-    let audioSourceUrl: string | null = null;
-
-    // 2. إذا لم يكن في الكاش: طلب المقطع الصوتي من نقطة النهاية /api/tts
-    if (!audioBlob) {
-      try {
-        const response = await fetch(`/api/tts?text=${encodeURIComponent(cleanText)}`);
-        if (response.ok) {
-          this.lastTtsProvider = response.headers.get('X-TTS-Provider') || 'unknown';
-          if (requireHetaf && this.lastTtsProvider !== 'hetaf') {
-            throw new Error('The TTS endpoint did not return Hetaf audio.');
-          }
-          audioBlob = await response.blob();
-          saveCachedAudioBlob(cacheKey, audioBlob, this.lastTtsProvider).catch(() => {});
-        } else if (requireHetaf) {
-          const failure = await response.json().catch(() => ({}));
-          throw new Error(failure.details?.message || failure.error || 'Hetaf TTS request failed.');
-        }
-      } catch (error) {
-        if (requireHetaf) {
-          this.lastTtsProvider = 'hetaf-error';
-          throw error;
-        }
-        this.lastTtsProvider = 'browser-google-fallback';
-      }
-    }
-
-    if (requireHetaf && !audioBlob) return false;
-
-    // 3. تحديد مصدر الصوت: إما Object URL من Blob أو البث المباشر المتاح دائماً
-    if (audioBlob) {
-      audioSourceUrl = URL.createObjectURL(audioBlob);
-    } else {
-      audioSourceUrl = `https://translate.google.com/translate_tts?client=tw-ob&tl=ar&q=${encodeURIComponent(cleanText)}`;
-      this.lastTtsProvider = 'browser-google-fallback';
-    }
-
-    // 4. إدارة التزامن: إيقاف أي أصوات سابقة حالية وإلغاء الـ speechSynthesis
-    this.stopSpeech();
-    const currentSession = ++this.speechSessionId;
-
-    try {
-      this.currentAudioUrl = audioBlob ? audioSourceUrl : null;
-
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.crossOrigin = 'anonymous';
-      audio.src = audioSourceUrl;
-      this.currentAudio = audio;
-
-      return await new Promise<boolean>((resolve) => {
-        let isDone = false;
-        const finish = (success: boolean) => {
-          if (isDone) return;
-          isDone = true;
-          this.cleanupCurrentAudio();
-          this.notifySpeaking(false);
-          if (success && onEnd) onEnd();
-          resolve(success);
-        };
-
-        audio.onplay = () => {
-          // إذا حدث تشغيل صوت جديد أثناء التحميل، نلغي هذا الصوت
-          if (this.speechSessionId !== currentSession) {
-            finish(false);
-            return;
-          }
-          this.notifySpeaking(true);
-        };
-
-        audio.onended = () => {
-          finish(true);
-        };
-
-        audio.onerror = () => {
-          finish(false);
-        };
-
-        // تشغيل الصوت
-        audio.play().catch(() => {
-          finish(false);
-        });
-      });
-    } catch {
-      this.cleanupCurrentAudio();
-      this.notifySpeaking(false);
-      return false;
-    }
-  }
-
   /** تشغيل مقطع مولد مسبقاً من ملفات التطبيق دون API أو اتصال خارجي. */
   public playLocalAudio(audioUrl: string, onEnd?: () => void): void {
     if (typeof window === 'undefined') {
@@ -441,6 +230,12 @@ class AudioManager {
    * - أولوية 2: الصوت السحابي عالي الدقة (Cloud TTS) المخزن محلياً أو المتولد
    * - خطة بديلة (Fallback): نطق Web Speech API تلقائياً في حال انقطاع الشبكة أو نفاد الرصيد
    */
+  /**
+   * ترتيب تشغيل الصوت:
+   * 1. تسجيل الأهل الخاص بالموقف عند توفره.
+   * 2. الملف الصوتي المرفوع والمربوط بالنص.
+   * 3. صوت الجهاز الآلي للجمل التي لا تملك تسجيلاً.
+   */
   public speak(text: string, onEnd?: () => void, voiceClipKey?: ParentVoiceClipKey): void {
     const settings = Storage.getSettings();
     if (!settings.soundEnabled) {
@@ -448,7 +243,12 @@ class AudioManager {
       return;
     }
 
-    // أولوية 1: إذا كان هناك مقطع صوت مسجل من الأهل لهذا الموقف
+    if (typeof window === 'undefined' || !text.trim()) {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    // الأولوية الأولى: تسجيل الأهل المخصص لهذا الموقف.
     if (voiceClipKey && (settings.voiceMode === 'parent_custom' || recordedVoices.hasParentClip(voiceClipKey))) {
       const played = recordedVoices.playParentClip(voiceClipKey, () => {
         this.notifySpeaking(false);
@@ -460,33 +260,15 @@ class AudioManager {
       }
     }
 
-    if (typeof window === 'undefined' || !text.trim()) {
-      if (onEnd) onEnd();
-      return;
-    }
-
-    // إذا اختار المستخدم صراحة صوت الـ Web Speech الآلي من الإعدادات
-    if (settings.voiceMode === 'tts') {
-      this.speakWebSpeech(text, onEnd);
-      return;
-    }
-
-    // أولوية 2: مقاطع عربية مولدة مسبقاً ومضمّنة داخل التطبيق.
+    // الأولوية الثانية: التسجيل الصوتي المرفوع والمضمّن في ملفات اللعبة.
     const localAiAudioUrl = getLocalAiAudioUrl(text);
     if (localAiAudioUrl) {
       this.playLocalAudio(localAiAudioUrl, onEnd);
       return;
     }
 
-    // أولوية 3: تجربة الصوت السحابي (Cloud TTS + Cache Storage)
-    this.generateAndPlayCloudAudio(text, undefined, onEnd).then(success => {
-      if (!success) {
-        // Fallback فوري: استخدام Web Speech API
-        this.speakWebSpeech(text, onEnd);
-      }
-    }).catch(() => {
-      this.speakWebSpeech(text, onEnd);
-    });
+    // الأولوية الأخيرة: صوت الجهاز للجمل التي لا يوجد لها تسجيل مناسب.
+    this.speakWebSpeech(text, onEnd);
   }
 
   /**
@@ -691,10 +473,6 @@ class AudioManager {
     );
     const parentRecordings = Storage.getAllParentVoiceRecordings();
     const settings = Storage.getSettings();
-    // The API key is server-side only; the browser can call /api/tts without seeing it.
-    const isCloudTtsConfigured = false; // Confirmed asynchronously by the server-side Hetaf diagnostics endpoint.
-    const cloudVoiceId = DEFAULT_HETAF_VOICE_ID;
-
     return {
       isUnlocked: this.isUnlocked,
       audioContextState: ctx ? ctx.state : 'uninitialized',
@@ -704,8 +482,6 @@ class AudioManager {
       arabicVoiceList: arabicVoices.map(v => `${v.name} (${v.lang})`),
       parentRecordingsCount: Object.keys(parentRecordings).length,
       activeVoiceMode: settings.voiceMode,
-      isCloudTtsConfigured,
-      cloudVoiceId,
     };
   }
 
@@ -727,70 +503,31 @@ class AudioManager {
       speechStatus: 'starting',
       errorMessage: null,
       spokenText: 'أهلاً بك يا بطل! أنا الأسد لؤلؤ',
-      cloudTtsUsed: false,
-      cloudTtsProvider: null,
     };
     onUpdate({ ...currentState });
 
     const ctx = this.getContext();
-    if (ctx) {
-      if (ctx.state === 'suspended') {
-        try { await ctx.resume(); } catch {}
-      }
-      currentState.audioContextState = ctx.state;
-    } else {
-      currentState.audioContextState = 'غير مدعوم (not supported)';
+    if (ctx?.state === 'suspended') {
+      try { await ctx.resume(); } catch {}
     }
-
+    currentState.audioContextState = ctx ? ctx.state : 'غير مدعوم (not supported)';
     this.isUnlocked = true;
-    this.playSuccessChime();
     this.loadVoices();
-    
     currentState.totalVoices = this.availableVoices.length;
     currentState.hasArabicVoice = !!this.selectedArabicVoice;
     currentState.selectedVoiceName = this.selectedArabicVoice
       ? `${this.selectedArabicVoice.name} (${this.selectedArabicVoice.lang})`
       : null;
+
+    currentState.speechStatus = 'speaking';
     onUpdate({ ...currentState });
 
-    // اختبار اتصال Hetaf أولاً؛ لا نعلن نجاح الاختبار اعتماداً على Web Speech أو مزود آخر.
-    try {
-      const diagnosticResponse = await fetch('/api/tts?diagnostics=1', { cache: 'no-store' });
-      const diagnostic = await diagnosticResponse.json();
-      if (!diagnosticResponse.ok || !diagnostic.connected || !diagnostic.voiceAvailable) {
-        throw new Error(diagnostic.error?.message || 'تعذر الاتصال بـ Hetaf أو العثور على صوت Salma.');
-      }
-
-      currentState.spokenText = 'أهلاً بك يا بطل! أنا سلمى';
-      currentState.speechStatus = 'speaking';
-      onUpdate({ ...currentState });
-
-      const playedCloud = await this.generateAndPlayCloudAudio(
-        currentState.spokenText,
-        DEFAULT_HETAF_VOICE_ID,
-        undefined,
-        true
-      );
-
-      if (!playedCloud || this.lastTtsProvider !== 'hetaf') {
-        throw new Error('لم يتم تشغيل صوت Hetaf Salma؛ لم يتم اعتماد الاختبار.');
-      }
-
+    this.speak(currentState.spokenText, () => {
       currentState.speechStatus = 'success';
-      currentState.cloudTtsUsed = true;
-      currentState.cloudTtsProvider = 'hetaf';
       onUpdate({ ...currentState });
-      return;
-    } catch (error) {
-      currentState.speechStatus = 'error';
-      currentState.cloudTtsUsed = false;
-      currentState.cloudTtsProvider = null;
-      currentState.errorMessage = error instanceof Error ? error.message : 'فشل اختبار Hetaf Salma.';
-      onUpdate({ ...currentState });
-      return;
-    }
-
+    });
   }
+
 }
 
 export const audioManager = new AudioManager();
