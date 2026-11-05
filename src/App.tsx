@@ -61,89 +61,28 @@ interface EpisodeBaseConfig {
   color: string;
 }
 
-const EPISODES_BASE: EpisodeBaseConfig[] = [
-  {
-    id: 'ep_1',
-    number: 1,
-    title: 'بوابة الحارس الصخري',
-    subtitle: 'استخدم الكلمات السحرية للإقناع وفتح البوابة',
-    stageId: 'magic_words',
-    emoji: '🪄',
-    color: 'from-amber-400 to-orange-500',
-  },
-  {
-    id: 'ep_2',
-    number: 2,
-    title: 'عاصفة جبل الغضب',
-    subtitle: 'تنفس كالبالون لتهدئة الرياح الهائجة',
-    stageId: 'rose_breathing',
-    emoji: '🎈',
-    color: 'from-rose-400 to-pink-500',
-  },
-  {
-    id: 'ep_3',
-    number: 3,
-    title: 'عبّارة النهر البطيئة',
-    subtitle: 'تدرّب على الصبر حتى تعبر النهر بأمان',
-    stageId: 'hourglass',
-    emoji: '⏳',
-    color: 'from-sky-400 to-blue-500',
-  },
-  {
-    id: 'ep_4',
-    number: 4,
-    title: 'الجسر المحطم',
-    subtitle: 'ابتكر خطة بديلة ذكية للوصول للهدف',
-    stageId: 'plan_b',
-    emoji: '🧭',
-    color: 'from-emerald-400 to-teal-500',
-  },
-  {
-    id: 'ep_5',
-    number: 5,
-    title: 'مملكة المشاركة العادلة',
-    subtitle: 'تعلم تبادل الأدوار والمشاركة الودية',
-    stageId: 'sharing',
-    emoji: '🤝',
-    color: 'from-teal-400 to-emerald-500',
-  },
-  {
-    id: 'ep_6',
-    number: 6,
-    title: 'مرآة القلوب والتعاطف',
-    subtitle: 'افهم مشاعر الأصدقاء وقدم لهم الدعم',
-    stageId: 'empathy',
-    emoji: '💖',
-    color: 'from-pink-400 to-rose-500',
-  },
-  {
-    id: 'ep_7',
-    number: 7,
-    title: 'برج الذاكرة الحكيم',
-    subtitle: 'تحدي التركيز وتطابق الصور الذهبية',
-    stageId: 'memory_game',
-    emoji: '🃏',
-    color: 'from-indigo-400 to-purple-500',
-  },
-  {
-    id: 'ep_8',
-    number: 8,
-    title: 'واحة فقاعات الهدوء',
-    subtitle: 'استرخِ وفجر الفقاعات لتفريغ التوتر',
-    stageId: 'zen_bubbles',
-    emoji: '🫧',
-    color: 'from-cyan-400 to-sky-500',
-  },
-  {
-    id: 'ep_9',
-    number: 9,
-    title: 'وادي الدموع والحضن الدافئ',
-    subtitle: 'عبر عن مشاعرك واطلب عناقاً مريحاً',
-    stageId: 'when_i_cry',
-    emoji: '🫂',
-    color: 'from-violet-400 to-purple-500',
-  },
-];
+const EPISODE_COLORS = [
+  'from-amber-400 to-orange-500',
+  'from-sky-400 to-blue-500',
+  'from-emerald-400 to-teal-500',
+  'from-teal-400 to-emerald-500',
+  'from-violet-400 to-purple-500',
+  'from-rose-400 to-pink-500',
+  'from-pink-400 to-rose-500',
+  'from-indigo-400 to-purple-500',
+  'from-cyan-400 to-sky-500',
+] as const;
+
+// مصدر واحد للحقيقة: بيانات القصة تحدد اسم المحطة وأيقونتها واللعبة المرتبطة بها.
+const EPISODES_BASE: EpisodeBaseConfig[] = STORY_EPISODES.map((episode, index) => ({
+  id: episode.id,
+  number: episode.number,
+  title: episode.title,
+  subtitle: episode.subtitle,
+  stageId: episode.stageId,
+  emoji: episode.icon,
+  color: EPISODE_COLORS[index % EPISODE_COLORS.length],
+}));
 
 const EMOTIONS_CONFIG: Array<{
   type: EmotionType;
@@ -314,17 +253,10 @@ export default function App() {
     haptics.tap();
 
     // البحث عن القصة التفاعلية المرتبطة بالمرحلة
-    const storyEpisode = STORY_EPISODES.find(
-      (s) => s.stageId === episode.stageId || s.id === episode.id
-    );
+    const storyEpisode = STORY_EPISODES.find((s) => s.id === episode.id);
 
     if (storyEpisode) {
-      const adaptedStory: StoryEpisode = {
-        ...storyEpisode,
-        title: episode.title,
-        subtitle: episode.subtitle,
-      };
-      setActiveStoryEpisode(adaptedStory);
+      setActiveStoryEpisode(storyEpisode);
       setStoryMode('intro');
       Storage.setCurrentEpisodeId(episode.id);
     } else if (episode.stageId) {
