@@ -8,6 +8,7 @@
 import { ParentVoiceClipKey } from '../types';
 import { Storage } from './storage';
 import { recordedVoices } from './recordedVoices';
+import { getLocalAiAudioUrl } from './aiVoices';
 
 export const TTS_CACHE_NAME = 'kids-tts-audio-v1';
 export const DEFAULT_ELEVEN_VOICE_ID = 'I3u6waC588j43py1kDN2'; // Custom child-friendly Arabic voice
@@ -368,6 +369,40 @@ class AudioManager {
     }
   }
 
+  /** تشغيل مقطع مولد مسبقاً من ملفات التطبيق دون API أو اتصال خارجي. */
+  public playLocalAudio(audioUrl: string, onEnd?: () => void): void {
+    if (typeof window === 'undefined') {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    this.stopSpeech();
+    const currentSession = ++this.speechSessionId;
+    const audio = new Audio(audioUrl);
+    audio.preload = 'auto';
+    this.currentAudio = audio;
+
+    let isDone = false;
+    const finish = (success: boolean) => {
+      if (isDone) return;
+      isDone = true;
+      this.cleanupCurrentAudio();
+      this.notifySpeaking(false);
+      if (onEnd) onEnd();
+    };
+
+    audio.onplay = () => {
+      if (this.speechSessionId !== currentSession) {
+        finish(false);
+        return;
+      }
+      this.notifySpeaking(true);
+    };
+    audio.onended = () => finish(true);
+    audio.onerror = () => finish(false);
+    audio.play().catch(() => finish(false));
+  }
+
   /**
    * تشغيل الصوت بالدعم الكامل:
    * - أولوية 1: تسجيل صوت الوالدين المخصص
@@ -404,7 +439,14 @@ class AudioManager {
       return;
     }
 
-    // أولوية 2: تجربة الصوت السحابي (Cloud TTS + Cache Storage)
+    // أولوية 2: مقاطع عربية مولدة مسبقاً ومضمّنة داخل التطبيق.
+    const localAiAudioUrl = getLocalAiAudioUrl(text);
+    if (localAiAudioUrl) {
+      this.playLocalAudio(localAiAudioUrl, onEnd);
+      return;
+    }
+
+    // أولوية 3: تجربة الصوت السحابي (Cloud TTS + Cache Storage)
     this.generateAndPlayCloudAudio(text, undefined, onEnd).then(success => {
       if (!success) {
         // Fallback فوري: استخدام Web Speech API
