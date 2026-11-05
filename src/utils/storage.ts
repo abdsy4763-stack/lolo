@@ -132,7 +132,11 @@ export const Storage = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (!data) return DEFAULT_SETTINGS;
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+      const saved = JSON.parse(data);
+      const settings = { ...DEFAULT_SETTINGS, ...saved };
+      // Migrate installations that previously selected the removed TTS-only mode.
+      if (settings.voiceMode === 'tts') settings.voiceMode = 'recorded';
+      return settings;
     } catch {
       return DEFAULT_SETTINGS;
     }
