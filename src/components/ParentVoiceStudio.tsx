@@ -123,7 +123,7 @@ export const ParentVoiceStudio: React.FC<ParentVoiceStudioProps> = ({
           <Volume2 className="w-4 h-4 text-indigo-600" />
           <span>مصدر ونمط الصوت في اللعبة</span>
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button
             onClick={() => handleVoiceModeChange('parent_custom')}
             className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition cursor-pointer ${
@@ -150,18 +150,7 @@ export const ParentVoiceStudio: React.FC<ParentVoiceStudioProps> = ({
             <span className="text-[10px] opacity-80">أصوات بشرية مشجعة</span>
           </button>
 
-          <button
-            onClick={() => handleVoiceModeChange('tts')}
-            className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition cursor-pointer ${
-              settings.voiceMode === 'tts'
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            <span className="text-base">🤖</span>
-            <span>قراءة النظام الآلية</span>
-            <span className="text-[10px] opacity-80">Web Speech API</span>
-          </button>
+
         </div>
       </div>
 
