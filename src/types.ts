@@ -132,7 +132,7 @@ export interface ArgumentStats {
   custom: number;
 }
 
-export type VoiceSourceMode = 'recorded' | 'parent_custom' | 'tts';
+export type VoiceSourceMode = 'recorded' | 'parent_custom';
 
 export type ParentVoiceClipKey = 
   | 'welcome' 
