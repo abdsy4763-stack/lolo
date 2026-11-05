@@ -1,8 +1,8 @@
 /**
  * مدير الصوت المطور (AudioManager)
  * يدعم الأصوات المسجلة البشرية، تسجيلات الأهل بالميكروفون،
- * نظام الصوت السحابي بالذكاء الاصطناعي (Cloud AI TTS) مع تخزين مؤقت (Cache Storage API)،
- * ونظام Web Speech API كخطة بديلة تلقائية (Fallback)
+ * ملفات صوتية بشرية مرفوعة، وتسجيلات الأهل،
+ * ونظام Web Speech API كخطة بديلة للجمل غير المسجلة
  */
 
 import { ParentVoiceClipKey } from '../types';
@@ -191,7 +191,7 @@ class AudioManager {
   }
 
   /** تشغيل مقطع مولد مسبقاً من ملفات التطبيق دون API أو اتصال خارجي. */
-  public playLocalAudio(audioUrl: string, onEnd?: () => void): void {
+  public playLocalAudio(audioUrl: string, onEnd?: () => void, onError?: () => void): void {
     if (typeof window === 'undefined') {
       if (onEnd) onEnd();
       return;
@@ -209,7 +209,13 @@ class AudioManager {
       isDone = true;
       this.cleanupCurrentAudio();
       this.notifySpeaking(false);
-      if (onEnd) onEnd();
+      if (success) {
+        if (onEnd) onEnd();
+      } else if (onError) {
+        onError();
+      } else if (onEnd) {
+        onEnd();
+      }
     };
 
     audio.onplay = () => {
@@ -227,8 +233,8 @@ class AudioManager {
   /**
    * تشغيل الصوت بالدعم الكامل:
    * - أولوية 1: تسجيل صوت الوالدين المخصص
-   * - أولوية 2: الصوت السحابي عالي الدقة (Cloud TTS) المخزن محلياً أو المتولد
-   * - خطة بديلة (Fallback): نطق Web Speech API تلقائياً في حال انقطاع الشبكة أو نفاد الرصيد
+   * - أولوية 2: الملفات الصوتية البشرية المضمّنة في التطبيق
+   * - خطة بديلة: نطق Web Speech API للجمل التي لا تملك تسجيلاً
    */
   /**
    * ترتيب تشغيل الصوت:
@@ -263,7 +269,7 @@ class AudioManager {
     // الأولوية الثانية: التسجيل الصوتي المرفوع والمضمّن في ملفات اللعبة.
     const localAiAudioUrl = getLocalAiAudioUrl(text);
     if (localAiAudioUrl) {
-      this.playLocalAudio(localAiAudioUrl, onEnd);
+      this.playLocalAudio(localAiAudioUrl, onEnd, () => this.speakWebSpeech(text, onEnd));
       return;
     }
 
