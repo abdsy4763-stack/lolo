@@ -142,7 +142,7 @@ export const StageBrainGames: React.FC<Props> = ({ game, onBack, onEarnStar }) =
           {game === 'robot_programming' && <>
             <p className="text-center font-black text-slate-800 mb-3">أضف الأوامر بالترتيب ثم اضغط تشغيل</p>
             <div className="grid grid-cols-5 gap-1 max-w-xs mx-auto mb-4">
-              {Array.from({ length: 25 }, (_, i) => { const x=i%5, y=Math.floor(i/5); return <div key={i} className={`aspect-square rounded-lg flex items-center justify-center text-2xl border ${position.x===x&&position.y===y?'bg-sky-200 border-sky-500':'bg-slate-50 border-slate-200'}`}>{position.x===x&&position.y===y?'🤖':x===4&&y===4?'⭐':''}</div>; })}
+              {Array.from({ length: 25 }, (_, i) => { const x=i%5, y=Math.floor(i/5); return <div key={i} className={`aspect-square rounded-lg flex items-center justify-center text-2xl border ${maze.walls.includes(`${x},${y}`)?'bg-stone-300 border-stone-400':position.x===x&&position.y===y?'bg-sky-200 border-sky-500':'bg-slate-50 border-slate-200'}`}>{maze.walls.includes(`${x},${y}`)?'🪨':position.x===x&&position.y===y?'🤖':x===4&&y===4?'⭐':''}</div>; })}
             </div>
             <div className="min-h-14 p-3 rounded-xl bg-slate-100 text-center text-2xl mb-3">{commands.length ? commands.join(' ') : 'أوامرك ستظهر هنا'}</div>
             <div className="grid grid-cols-4 gap-2">{DIRS.map(d => <button key={d.id} onClick={() => { if(program.length<12){setProgram(p=>[...p,d.id]);sound.playTap();} }} className="p-3 rounded-xl bg-indigo-100 font-black"><span className="text-2xl block">{d.icon}</span><span className="text-xs">{d.label}</span></button>)}</div>
