@@ -38,7 +38,10 @@ export type StageId =
   | 'memory_game'
   | 'zen_bubbles'
   | 'sharing'
-  | 'empathy';
+  | 'empathy'
+  | 'decision_maze'
+  | 'robot_programming'
+  | 'pattern_secret';
 
 export interface StageInfo {
   id: StageId;
