@@ -11,8 +11,16 @@ const PATTERNS=[
  [{seq:['🔴','🔵','🟢','🔴','🔵'],choices:['🟢','🟡','🔴'],answer:'🟢'},{seq:['🐟','🐟','🐠','🐟','🐟'],choices:['🐟','🐠','🐬'],answer:'🐠'},{seq:['1️⃣','2️⃣','3️⃣','1️⃣','2️⃣'],choices:['1️⃣','3️⃣','4️⃣'],answer:'3️⃣'}],
  [{seq:['🔺','🔻','🔻','🔺','🔻','🔻'],choices:['🔺','🔻','🟦'],answer:'🔺'},{seq:['🌞','🌙','⭐','🌞','🌙'],choices:['🌙','⭐','🌞'],answer:'⭐'},{seq:['🟢','🟡','🟡','🟢','🟡','🟡'],choices:['🔴','🟡','🟢'],answer:'🟢'}]
 ];
-const BALANCE=[{left:'🍎 🍎 🍎',right:'🍌 🍌',answer:'left'},{left:'🍐 🍐',right:'🍒 🍒 🍒',answer:'right'},{left:'🍊 🍊 🍊 🍊',right:'🍇 🍇 🍇',answer:'left'}];
-const DETECTIVE=[{rows:3,base:'🍀',odd:'🌼',index:4},{rows:4,base:'🔵',odd:'🟣',index:10},{rows:5,base:'⭐',odd:'🌟',index:17}];
+const BALANCE=[
+ [{left:'🍎 🍎',right:'🍌',answer:'left'},{left:'🍐',right:'🍒 🍒',answer:'right'},{left:'🍊 🍊 🍊',right:'🍇 🍇',answer:'left'}],
+ [{left:'🍎 🍎 🍎',right:'🍌 🍌',answer:'left'},{left:'🍐 🍐',right:'🍒 🍒 🍒',answer:'right'},{left:'🍊 🍊',right:'🍇 🍇 🍇',answer:'right'}],
+ [{left:'🍎 🍎 🍎 🍎',right:'🍌 🍌 🍌',answer:'left'},{left:'🍐 🍐 🍐',right:'🍒 🍒 🍒 🍒',answer:'right'},{left:'🍊 🍊 🍊 🍊',right:'🍇 🍇 🍇',answer:'left'}]
+];
+const DETECTIVE=[
+ [{rows:3,base:'🍀',odd:'🌼',index:4},{rows:3,base:'🐟',odd:'🐠',index:7},{rows:3,base:'🔴',odd:'🟠',index:1}],
+ [{rows:4,base:'🔵',odd:'🟣',index:10},{rows:4,base:'🌸',odd:'🌺',index:3},{rows:4,base:'🐱',odd:'🐯',index:13}],
+ [{rows:5,base:'⭐',odd:'🌟',index:17},{rows:5,base:'🍎',odd:'🍒',index:6},{rows:5,base:'🟩',odd:'🟢',index:22}]
+];
 const INFO:Record<BrainGameId,{title:string;subtitle:string;emoji:string;gradient:string}>={
  decision_maze:{title:'متاهة القرارات',subtitle:'خطط للطريق وتجنب العوائق للوصول إلى الكنز',emoji:'🧭',gradient:'from-emerald-100 to-teal-200'},
  pattern_secret:{title:'سرّ الأنماط',subtitle:'اكتشف القاعدة واختر الشكل الذي يكمل التسلسل',emoji:'🧩',gradient:'from-amber-100 to-rose-200'},
@@ -21,7 +29,7 @@ const INFO:Record<BrainGameId,{title:string;subtitle:string;emoji:string;gradien
 };
 export const StageBrainGames:React.FC<Props>=({game,onBack,onEarnStar})=>{
  const [level,setLevel]=useState(0),[position,setPosition]=useState({x:0,y:0}),[moves,setMoves]=useState(0),[round,setRound]=useState(0),[feedback,setFeedback]=useState('فكر جيداً، وكل محاولة تقربك من الحل!'),[finished,setFinished]=useState(false);
- const info=INFO[game],maze=MAZES[level],pattern=PATTERNS[level][round],balance=BALANCE[level],detective=DETECTIVE[level];
+ const info=INFO[game],maze=MAZES[level],pattern=PATTERNS[level][round],balance=BALANCE[level][round],detective=DETECTIVE[level][round];
  const reset=()=>{setPosition({x:0,y:0});setMoves(0);setRound(0);setFinished(false);setFeedback('ابدأ تحدياً جديداً!')};
  const win=()=>{if(finished)return;setFinished(true);sound.playTada();haptics.success();confetti({particleCount:90,spread:75,origin:{y:.55}});const rewards:Record<BrainGameId,[string,string]>={decision_maze:['🧭','التخطيط واختيار المسار وحل المتاهات'],pattern_secret:['🧩','اكتشاف الأنماط والتفكير المنطقي'],balance_scale:['⚖️','المقارنة والاستنتاج وتقدير الكميات'],spot_difference:['🔎','الملاحظة البصرية والانتباه للتفاصيل']};onEarnStar(...rewards[game])};
  const advance=()=>{sound.playSuccessChime();haptics.success();if(round===2)win();else{setRound(v=>v+1);setFeedback('أحسنت! لننتقل إلى التحدي التالي.')}};
