@@ -350,7 +350,7 @@ export const StageBalloonBreathing: React.FC<StageBalloonBreathingProps> = ({
           setInflationProgress(15);
           const nextPrompt = `البالون رقم ${balloonIndex + 2}: اختر شعوراً آخر لنطيره!`;
           setCurrentPrompt(nextPrompt);
-          sound.speak(nextPrompt);
+          sound.speak('اختر شعوراً آخر لنطيره!');
         }
       }, 3500);
     }

@@ -1,0 +1,37 @@
+# نظام أصوات اللعبة
+
+لا يوجد أي صوت آلي في اللعبة. كل جملة تُشغَّل من ملف MP3 ثابت في `public/audio/voices/`،
+واسم الملف هو مفتاح مأخوذ من نص الجملة (`src/utils/voiceKey.ts`).
+الجملة التي ليس لها ملف تبقى مكتوبة على الشاشة ويكمل التدفق بعد مدة قراءة قصيرة.
+
+## الأوامر
+
+```bash
+npm run voices:sync        # يجمع الجمل المطلوبة، يحدّث manifest.json، ويكتب قائمة الناقص
+npm run voices:generate -- --gender boy --limit 20   # يولّد الناقص (يتخطى الموجود، ويمكن استئنافه)
+```
+
+`voices:generate` يحتاج مرة واحدة:
+`npm install --no-save @google/genai @breezystack/lamejs` ومفتاحاً مجانياً `GEMINI_API_KEY` من Google AI Studio.
+يعمل على جهازك قبل النشر فقط؛ اللعبة نفسها لا تستدعي أي API.
+
+## إضافة جملة جديدة
+
+1. اكتبها في `src/data/dialogue.ts` أو `episodes.ts` (أو في المكوّن إن كانت ثابتة)، دون اسم الطفل أو الرفيق.
+2. `npm run voices:sync` ثم `npm run voices:generate`.
+
+## جمل لم يلتقطها الاستخراج
+
+شغّل اللعبة بوضع التطوير (`npm run dev`) والعب كل المراحل. ستظهر في الكونسول رسائل `[voice-missing]`.
+انسخ القائمة بالأمر `copy(JSON.stringify(window.__voiceMissing, null, 2))` واحفظها في
+`scripts/voices/extra-lines.json` ثم شغّل `voices:sync`.
+
+## المؤثرات
+
+`public/audio/sfx/` تسجيلات من حزمة Kenney UI Audio بترخيص CC0 (انظر ملف الترخيص هناك).
+الأسماء المستخدمة معرّفة في `SAMPLE_FILES` أعلى `src/utils/audio.ts`.
+
+## المقاطع القديمة
+
+الـ25 مقطعاً الأصلية محفوظة في `scripts/voices/legacy-wav` (خارج حزمة اللعبة).
+أُعيد استخدام ما لا يحتوي اسماً منها، والباقي يُعاد توليده بصيغة بلا اسم.

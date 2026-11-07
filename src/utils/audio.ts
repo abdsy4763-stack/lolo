@@ -8,7 +8,20 @@
 import { ParentVoiceClipKey } from '../types';
 import { Storage } from './storage';
 import { recordedVoices } from './recordedVoices';
-import { getLocalAiAudioUrl } from './aiVoices';
+import { voiceLibrary } from './voiceLibrary';
+import {
+  COMPANION_DEFAULT_NAMES,
+  fillPlaceholders,
+  neutralizeSpoken,
+  splitSegments,
+} from './voiceKey';
+
+/** مؤثرات حقيقية مفتوحة الترخيص (Kenney UI Audio - CC0). غيّر الأسماء هنا لتجرب غيرها. */
+const SAMPLE_FILES: Record<string, string> = {
+  tap: '/audio/sfx/tap.mp3',
+  pop: '/audio/sfx/pop.mp3',
+  tick: '/audio/sfx/tick.mp3',
+};
 
 export interface DialogueAudioEntry {
   text?: string;
@@ -141,19 +154,9 @@ class AudioManager {
       }
       this.loadVoices();
       this.isUnlocked = true;
+      this.preloadSamples();
       this.playTap();
-      
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const testUtterance = new SpeechSynthesisUtterance(' ');
-        testUtterance.lang = 'ar-SA';
-        testUtterance.rate = 0.9;
-        testUtterance.volume = 0.05; 
-        if (this.selectedArabicVoice) {
-          testUtterance.voice = this.selectedArabicVoice;
-        }
-        window.speechSynthesis.speak(testUtterance);
-      }
+      voiceLibrary.whenReady().catch(() => {});
       this.notifyStateChanged();
       if (onReady) onReady();
       return true;
@@ -190,51 +193,57 @@ class AudioManager {
     }
   }
 
-  /** تشغيل مقطع مولد مسبقاً من ملفات التطبيق دون API أو اتصال خارجي. */
-  public playLocalAudio(audioUrl: string, onEnd?: () => void, onError?: () => void): void {
-    if (typeof window === 'undefined') {
-      if (onEnd) onEnd();
-      return;
-    }
+  /**
+   * تشغيل عدة مقاطع بالتتابع من ملفات التطبيق (دون API أو اتصال خارجي).
+   * المقطع الناقص (null) يُتخطى بفاصل قصير. ينادي onEnd مرة واحدة في النهاية.
+   */
+  private playClipSequence(urls: Array<string | null>, session: number, onEnd?: () => void): void {
+    let index = 0;
+    let started = false;
 
-    this.stopSpeech();
-    const currentSession = ++this.speechSessionId;
-    const audio = new Audio(audioUrl);
-    audio.preload = 'auto';
-    this.currentAudio = audio;
-
-    let isDone = false;
-    const finish = (success: boolean) => {
-      if (isDone) return;
-      isDone = true;
+    const finishAll = () => {
+      if (this.speechSessionId !== session) return;
       this.cleanupCurrentAudio();
       this.notifySpeaking(false);
-      if (success) {
-        if (onEnd) onEnd();
-      } else if (onError) {
-        onError();
-      } else if (onEnd) {
-        onEnd();
-      }
+      if (onEnd) onEnd();
     };
 
-    audio.onplay = () => {
-      if (this.speechSessionId !== currentSession) {
-        finish(false);
+    const next = () => {
+      if (this.speechSessionId !== session) return;
+      if (index >= urls.length) {
+        finishAll();
         return;
       }
-      this.notifySpeaking(true);
+      const url = urls[index++];
+      if (!url) {
+        setTimeout(next, 300);
+        return;
+      }
+      this.cleanupCurrentAudio();
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      this.currentAudio = audio;
+      audio.onplay = () => {
+        if (this.speechSessionId !== session) return;
+        if (!started) {
+          started = true;
+          this.notifySpeaking(true);
+        }
+      };
+      audio.onended = () => next();
+      audio.onerror = () => next();
+      audio.play().catch(() => next());
     };
-    audio.onended = () => finish(true);
-    audio.onerror = () => finish(false);
-    audio.play().catch(() => finish(false));
+
+    next();
   }
 
   /**
-   * ترتيب تشغيل الصوت:
-   * 1. تسجيل الأهل الخاص بالموقف عند توفره.
-   * 2. الملف الصوتي المرفوع والمربوط بالنص.
-   * 3. صوت الجهاز الآلي للجمل التي لا تملك تسجيلاً.
+   * تشغيل الجملة بمقاطع بشرية/جاهزة فقط:
+   * 1. تسجيل الأهل الخاص بالموقف عند توفره (ميزة اختيارية).
+   * 2. مقاطع التطبيق الجاهزة، ويُبحث عنها بمفتاح ثابت من النص بعد حذف اسم الرفيق.
+   * لا يوجد أي صوت آلي احتياطي: الجملة التي لا مقطع لها تبقى مكتوبة على الشاشة
+   * ويكمل التدفق بعد مدة قراءة قصيرة، وتُسجَّل في وضع التطوير لنولّد مقطعها لاحقاً.
    */
   public speak(text: string, onEnd?: () => void, voiceClipKey?: ParentVoiceClipKey): void {
     const settings = Storage.getSettings();
@@ -260,15 +269,45 @@ class AudioManager {
       }
     }
 
-    // الأولوية الثانية: التسجيل الصوتي المرفوع والمضمّن في ملفات اللعبة.
-    const localAiAudioUrl = getLocalAiAudioUrl(text);
-    if (localAiAudioUrl) {
-      this.playLocalAudio(localAiAudioUrl, onEnd, () => this.speakWebSpeech(text, onEnd));
-      return;
-    }
+    // الأولوية الثانية: مقاطع التطبيق الجاهزة (بلا اسم الرفيق، ومفصولة عند " .. ").
+    this.stopSpeech();
+    const session = ++this.speechSessionId;
 
-    // الأولوية الأخيرة: صوت الجهاز للجمل التي لا يوجد لها تسجيل مناسب.
-    this.speakWebSpeech(text, onEnd);
+    let companionName = '';
+    try {
+      companionName = Storage.getCompanionProfile().name || '';
+    } catch {
+      // ignore
+    }
+    const spoken = neutralizeSpoken(
+      fillPlaceholders(text, settings.childGender),
+      [...COMPANION_DEFAULT_NAMES, companionName],
+      settings.childGender
+    );
+    const segments = splitSegments(spoken);
+
+    voiceLibrary.whenReady().then(() => {
+      if (this.speechSessionId !== session) return;
+
+      const urls = segments.map(seg => {
+        const url = voiceLibrary.getClipUrl(seg);
+        if (!url) voiceLibrary.reportMissing(seg);
+        return url;
+      });
+
+      if (urls.every(u => !u)) {
+        // لا مقطع لهذه الجملة: لا صوت آلي. نترك وقتاً للقراءة ثم نكمل التدفق.
+        const readingMs = Math.min(5000, 800 + spoken.length * 45);
+        this.safetyTimer = setTimeout(() => {
+          this.safetyTimer = null;
+          if (this.speechSessionId !== session) return;
+          if (onEnd) onEnd();
+        }, readingMs);
+        return;
+      }
+
+      this.playClipSequence(urls, session, onEnd);
+    });
   }
 
   /**
@@ -373,8 +412,49 @@ class AudioManager {
     }
   }
 
+  // --- مؤثرات من تسجيلات حقيقية (CC0) مع الرجوع للنغمة المولّدة عند غيابها ---
+  private sampleBuffers = new Map<string, AudioBuffer>();
+  private samplesRequested = false;
+
+  /** يحمّل ويفك ترميز المؤثرات مرة واحدة بعد أول لمسة */
+  public preloadSamples(): void {
+    if (this.samplesRequested || typeof window === 'undefined' || typeof fetch === 'undefined') return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    this.samplesRequested = true;
+    Object.entries(SAMPLE_FILES).forEach(([name, url]) => {
+      fetch(url)
+        .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
+        .then(buf => new Promise<AudioBuffer>((resolve, reject) => ctx.decodeAudioData(buf, resolve, reject)))
+        .then(decoded => {
+          this.sampleBuffers.set(name, decoded);
+        })
+        .catch(() => {});
+    });
+  }
+
+  private playSample(name: string, rate = 1, volume = 0.6): boolean {
+    const ctx = this.getContext();
+    const buffer = this.sampleBuffers.get(name);
+    if (!ctx || !buffer || ctx.state !== 'running') return false;
+    try {
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buffer;
+      src.playbackRate.value = rate;
+      gain.gain.value = volume;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // --- دوال Web Audio API ونغمات التشجيع المسجلة ---
   public playBubblePop(): void {
+    if (this.isUnlocked && this.playSample('pop', 0.85 + Math.random() * 0.5, 0.7)) return;
     if (!this.isUnlocked) return; const ctx = this.getContext(); if (!ctx || ctx.state !== 'running') return; try { const osc = ctx.createOscillator(); const gain = ctx.createGain(); const now = ctx.currentTime; const startFreq = 440 + Math.random() * 80; osc.type = 'sine'; osc.frequency.setValueAtTime(startFreq, now); osc.frequency.exponentialRampToValueAtTime(140, now + 0.12); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12); osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.13); } catch {}
   }
   public playSuccessChime(): void {
@@ -457,12 +537,14 @@ class AudioManager {
     if (!this.isUnlocked) return; const ctx = this.getContext(); if (!ctx || ctx.state !== 'running') return; try { const now = ctx.currentTime; const freqs = [329.63, 440.0, 523.25]; freqs.forEach(freq => { const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(freq, now); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.15, now + 0.3); gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8); osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 1.9); }); } catch {}
   }
   public playBalloonInflateTick(): void {
+    if (this.isUnlocked && this.playSample('tick', 0.9 + Math.random() * 0.3, 0.35)) return;
     if (!this.isUnlocked) return; const ctx = this.getContext(); if (!ctx || ctx.state !== 'running') return; try { const now = ctx.currentTime; const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(180, now); osc.frequency.exponentialRampToValueAtTime(320, now + 0.12); gain.gain.setValueAtTime(0.04, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12); osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.13); } catch {}
   }
   public playBalloonFlyAway(): void {
     if (!this.isUnlocked) return; const ctx = this.getContext(); if (!ctx || ctx.state !== 'running') return; try { const now = ctx.currentTime; const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(880, now + 0.8); gain.gain.setValueAtTime(0.01, now); gain.gain.linearRampToValueAtTime(0.18, now + 0.2); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9); osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.95); setTimeout(() => { this.playSuccessChime(); }, 500); } catch {}
   }
   public playTap(): void {
+    if (this.isUnlocked && this.playSample('tap', 1, 0.5)) return;
     const ctx = this.getContext(); if (!ctx) return; try { if (ctx.state === 'suspended' && this.isUnlocked) { ctx.resume().catch(() => {}); } const now = ctx.currentTime; const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(420, now); osc.frequency.exponentialRampToValueAtTime(210, now + 0.05); gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05); osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.06); } catch {}
   }
 

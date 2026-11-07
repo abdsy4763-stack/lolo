@@ -692,7 +692,7 @@ export default function App() {
             COMPANIONS_DATA[newProf.type].title
           );
           setHomePrompt(greeting);
-          sound.speak(`أهلاً بك يا ${newProf.name}!`);
+          sound.speak('أهلاً بك يا {friend}!');
         }}
       />
 

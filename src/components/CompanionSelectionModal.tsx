@@ -7,6 +7,9 @@ import { COMPANIONS_DATA, CompanionCharacter } from './CompanionCharacter';
 import { Storage } from '../utils/storage';
 import { sound } from '../utils/audio';
 
+/** جملة ثابتة بلا اسم الطفل أو الرفيق، لها مقطع صوتي جاهز */
+const NAME_PICKED_SPEECH = 'يا له من اسم جميل!';
+
 interface CompanionSelectionModalProps {
   isOpen: boolean;
   onClose?: () => void;
@@ -85,7 +88,7 @@ export const CompanionSelectionModal: React.FC<CompanionSelectionModalProps> = (
     sound.playTap();
     if (!isTypeUnlocked(type)) {
       const def = COMPANIONS_DATA[type];
-      sound.speak(`هذا الصديق يحتاج إلى ${def.starsRequiredToUnlock} نجوم شجاعة لفتحه! العب واجمع النجوم!`);
+      sound.speak('هذا الصديق يحتاج إلى نجوم شجاعة لفتحه! العب واجمع النجوم!');
       return;
     }
     setSelectedType(type);
@@ -96,8 +99,7 @@ export const CompanionSelectionModal: React.FC<CompanionSelectionModalProps> = (
   const handleConfirmType = () => {
     sound.playSuccessChime();
     setStep('name');
-    const intro = `مرحباً! اختر اسماً لصديقك الجديد: ${currentDef.title}`;
-    sound.speak(intro);
+    sound.speak('مرحباً! اختر اسماً لصديقك الجديد!');
   };
 
   const handleSelectName = (name: string) => {
@@ -106,7 +108,7 @@ export const CompanionSelectionModal: React.FC<CompanionSelectionModalProps> = (
     const speech = `اسمي ${name}!`;
     setGreetingText(speech);
     sound.playSuccessChime();
-    sound.speak(speech);
+    sound.speak(NAME_PICKED_SPEECH);
   };
 
   // معالجة الضغط المطول على قفل الأهل للاسم المخصص
@@ -170,7 +172,7 @@ export const CompanionSelectionModal: React.FC<CompanionSelectionModalProps> = (
       const speech = `اسمي ${name}!`;
       setGreetingText(speech);
       sound.playSuccessChime();
-      sound.speak(speech);
+      sound.speak(NAME_PICKED_SPEECH);
     }
   };
 
@@ -331,7 +333,7 @@ export const CompanionSelectionModal: React.FC<CompanionSelectionModalProps> = (
                     {greetingText}
                   </span>
                   <button
-                    onClick={() => sound.speak(greetingText)}
+                    onClick={() => sound.speak(NAME_PICKED_SPEECH)}
                     className="p-1 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
                     title="استمع"
                   >

@@ -91,7 +91,7 @@ export const StageZenBubbles: React.FC<StageZenBubblesProps> = ({ onBack, onEarn
       const currentCoins = companion.coins || 0;
       Storage.saveCompanionProfile({ coins: currentCoins + finalScore });
     }
-    sound.speak(`أنت هادئ ورائع! لقد جمعت ${finalScore} عملة ذهبية.`);
+    sound.speak('أنت هادئ ورائع! لقد جمعت الكثير من العملات الذهبية.');
     Storage.addLog({ type: 'game_played', stageId: 'zen_bubbles', label: 'لعب فقاعات الهدوء', detail: `حصد ${finalScore} نقطة` });
     if (onEarnStar) {
       setTimeout(() => {

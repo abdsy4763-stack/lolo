@@ -118,7 +118,7 @@ export const StageMemoryGame: React.FC<StageMemoryGameProps> = ({ onBack, onEarn
     const currentCoins = companion.coins || 0;
     Storage.saveCompanionProfile({ coins: currentCoins + reward });
     
-    sound.speak(`عمل رائع! ذاكرتك قوية جداً. لقد حصلت على ${reward} عملة ذهبية!`);
+    sound.speak('عمل رائع! ذاكرتك قوية جداً. لقد ربحت عملات ذهبية!');
     Storage.addLog({ type: 'game_played', stageId: 'memory_game', label: 'لعب الذاكرة', detail: `أكملها في ${moves} محاولات` });
     if (onEarnStar) {
       setTimeout(() => {
