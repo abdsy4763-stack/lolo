@@ -1,13 +1,14 @@
 /**
- * npm run voices:generate -- --gender boy [--limit 60] [--batch 6] [--voice Kore]
+ * npm run voices:generate -- --gender boy [--limit 10] [--voice Kore]
  *
  * يولّد المقاطع الناقصة مرة واحدة على جهازك (وليس أثناء اللعب)، ويحفظها ملفات
  * MP3 ثابتة في public/audio/voices. بعدها تعمل اللعبة بلا أي API وبلا اتصال.
  *
  * الطبقة المجانية تحدّد عدد الطلبات (نحو 10 يومياً و3 في الدقيقة)، وليس طول النص.
- * لذلك نرسل عدة جمل في طلب واحد (--batch)، ثم نقصّ الصوت الناتج عند فترات الصمت
- * إلى مقطع لكل جملة (scripts/voices/split.mjs). وإن لم نطمئن للقصّ نعيد المحاولة
- * بدفعة أصغر، فلا يُحفظ مقطع مقصوص خطأً.
+ * الافتراضي جملة لكل طلب (--batch 1)، وهو الوضع الموثوق.
+ * --batch N تجريبي: يرسل عدة جمل في طلب ثم يقصّ الصوت عند فترات الصمت، لكن التجربة
+ * الفعلية أظهرت أن الخدمة تتوقف بطول متقارب عند كل علامة تعجب وفاصلة، فيلتبس القصّ
+ * وتُرفض أغلب الدفعات (فيضيع الطلب). لا تستخدمه إلا لتجربة بعد تغيير النموذج أو الأسلوب.
  *
  * السكربت يتخطى المقاطع الموجودة، فيمكن إيقافه واستئنافه في أي وقت.
  *
@@ -18,7 +19,7 @@
  * خيارات:
  *   --gender boy|girl|both   صيغة اللعبة المطلوبة (الافتراضي both)
  *   --limit N                أقصى عدد جمل يُولَّد في هذا التشغيل
- *   --batch N                عدد الجمل في الطلب الواحد (الافتراضي 6، و1 = جملة لكل طلب)
+ *   --batch N                عدد الجمل في الطلب الواحد (الافتراضي 1 وهو الموثوق؛ ما فوقه تجريبي)
  *   --voice NAME             اسم الصوت (الافتراضي Kore)
  *   --max-requests N         أقصى عدد طلبات في هذا التشغيل (مفيد للحصة اليومية)
  *   --delay S                ثوانٍ بين الطلبات (الافتراضي 21 لأن الحد 3 في الدقيقة)
@@ -46,7 +47,7 @@ const opt = (name, fallback) => {
 
 const gender = opt('gender', 'both');
 const limit = Number(opt('limit', '0')) || Infinity;
-const batchSize = Math.max(1, Number(opt('batch', '6')) || 6);
+const batchSize = Math.max(1, Number(opt('batch', '1')) || 1);
 const maxRequests = Number(opt('max-requests', '0')) || Infinity;
 const delaySec = Number(opt('delay', '21'));
 const model = process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts';
