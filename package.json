@@ -11,7 +11,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "voices:sync": "tsx scripts/voices/sync.ts",
-    "voices:generate": "node scripts/voices/generate.mjs"
+    "voices:generate": "node scripts/voices/generate.mjs",
+    "voices:generate:eleven": "node scripts/voices/generate-elevenlabs.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

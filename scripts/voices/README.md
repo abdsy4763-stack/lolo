@@ -16,7 +16,17 @@ node scripts/voices/test-split.mjs                    # يختبر قصّ الص
 `npm install --no-save @google/genai @breezystack/lamejs` ومفتاحاً مجانياً `GEMINI_API_KEY` من Google AI Studio.
 يعمل على جهازك قبل النشر فقط؛ اللعبة نفسها لا تستدعي أي API.
 
-### الحصة المجانية
+### ElevenLabs (الموصى به عند التخطيط لاستخدام تجاري)
+
+```bash
+set ELEVENLABS_API_KEY=مفتاحك        # Windows cmd
+npm run voices:generate:eleven -- --gender boy --dry-run   # يعرض العدد والأحرف
+npm run voices:generate:eleven -- --gender boy --limit 3   # تجربة
+npm run voices:generate:eleven -- --gender boy             # الكل
+```
+الصوت الافتراضي Laloosh. أصوات المكتبة عبر API تتطلب خطة مدفوعة، والترخيص التجاري يتطلب خطة مدفوعة (تحقق من شروط ElevenLabs).
+
+### الحصة المجانية (Gemini)
 
 الطبقة المجانية تحدّد **عدد الطلبات** (نحو 10 يومياً و3 في الدقيقة لنموذج الصوت)، وليس طول النص.
 الافتراضي جملة لكل طلب، والسكربت ينتظر 21 ثانية بين الطلبات، ويتوقف بهدوء عند نفاد الحصة، ويكمل في المرة التالية.
