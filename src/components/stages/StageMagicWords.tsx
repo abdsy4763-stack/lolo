@@ -83,7 +83,7 @@ export const StageMagicWords: React.FC<StageMagicWordsProps> = ({
     setShowCards(true);
 
     const initialText = formatDialogue(
-      `${currentRound.companionRequest} .. وماما ترد: "${currentRound.momInitial}"`,
+      `${currentRound.companionRequest} .. ${currentRound.momInitial}`,
       companion.name,
       companionDef.title,
       settings.childGender
@@ -91,7 +91,7 @@ export const StageMagicWords: React.FC<StageMagicWordsProps> = ({
     setCurrentPrompt(initialText);
 
     const spokenIntro = formatDialogue(
-      `${currentRound.companionRequest} .. لكن ماما تقول: ${currentRound.momInitial} .. استخدم الكلمات السحرية لإقناعها!`,
+      `${currentRound.companionRequest} .. ${currentRound.momInitial} .. استخدم الكلمات السحرية لإقناعها!`,
       companion.name,
       companionDef.title,
       settings.childGender

@@ -100,11 +100,6 @@ function composedLines(): string[] {
 
   out.push(`ماما تقول: ${d.planB.momStatement}`);
 
-  const rounds: any[] = d.magicWords?.rounds ?? [];
-  for (const r of rounds) {
-    out.push(`وماما ترد: ${r.momInitial}`);
-    out.push(`لكن ماما تقول: ${r.momInitial}`);
-  }
 
   const situations: any[] = d.empathy?.situations ?? [];
   for (const sc of situations) out.push(`كيف نساعد ${sc.character}؟`);
